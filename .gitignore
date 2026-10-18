@@ -1,0 +1,22 @@
+# === build / dependency ===
+node_modules/
+web/dist/
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
+
+# === credential — ห้ามขึ้น repo public เด็ดขาด ===
+sa.json
+*.sa.json
+service-account*.json
+credentials*.json
+
+# === ไฟล์ตั้งต้นที่ยังไม่ได้ตัดสินใจว่าจะเผยแพร่ไหม ===
+# "บัญชีจัดครูเข้าสอน" (รายชื่อครู_รายวิชา_IS_*.xlsx) ไม่ได้อยู่ในโฟลเดอร์ Drive ที่ครูส่งงาน
+# เข้ามา แต่เป็นแกนของรายงานทั้งหมด มีสองทางเลือก (ดู README):
+#   1. อัปโหลดเข้าโฟลเดอร์ Drive เดิม -> ไม่ต้อง commit อะไรเลย ลบ 2 บรรทัดล่างนี้ทิ้งได้
+#   2. commit ไฟล์เข้า repo นี้ -> ลบ 2 บรรทัดล่างนี้ แล้ว git add sync/inputs/
+# กันไว้ก่อนเพื่อไม่ให้ `git add -A` เผลอ push ไฟล์ของโรงเรียนขึ้น repo public โดยไม่ตั้งใจ
+sync/inputs/*
+!sync/inputs/.gitkeep

@@ -1,0 +1,98 @@
+# ดึงข้อมูลงาน IS จาก Google Drive -> web/public/data/report.json -> deploy ขึ้น GitHub Pages
+#
+# ทำงานสองทาง:
+#   1. cron ทุก 30 นาที ช่วงเวลาราชการ (วันจันทร์-ศุกร์) — ไม่กดอะไรก็ยังสด
+#   2. workflow_dispatch — ปุ่ม "อัปเดตข้อมูล" ในหน้าเว็บเรียกผ่าน GitHub REST API
+#      (ดู web/src/lib/github.js) หรือกด Run workflow จากหน้า Actions เองก็ได้
+#
+# ไม่เปิด trigger pull_request เด็ดขาด: repo นี้ public ถ้าเปิด PR จาก fork จะเข้าถึง secret
+# ของ Drive ได้ cron กับ workflow_dispatch รันในบริบทของ repo เท่านั้น secret จึงปลอดภัย
+name: sync
+
+on:
+  schedule:
+    # cron ของ GitHub เป็น UTC — ไทยคือ UTC+7 ดังนั้น 00:00-11:00 UTC = 07:00-18:00 ไทย
+    - cron: "*/30 0-11 * * 1-5"
+  workflow_dispatch:
+
+# กัน run ซ้อนกันเขียน report.json ทับกัน (ครูกดปุ่มตอน cron กำลังรันอยู่)
+# ไม่ cancel-in-progress เพราะ run ที่กำลัง commit อยู่ถูกตัดกลางทางจะทิ้ง repo ไว้ครึ่ง ๆ กลาง ๆ
+concurrency:
+  group: sync
+  cancel-in-progress: false
+
+permissions:
+  contents: write      # commit report.json กลับ repo
+  pages: write         # deploy Pages
+  id-token: write      # ต้องมีสำหรับ actions/deploy-pages
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: ติดตั้ง dependency ของ script
+        run: pip install -r sync/requirements.txt
+
+      - name: ดึงข้อมูลจาก Google Drive แล้วเขียน report.json
+        id: export
+        env:
+          GDRIVE_SA_JSON: ${{ secrets.GDRIVE_SA_JSON }}
+          GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
+        run: |
+          set +e
+          python -m sync.export_report --out web/public/data/report.json
+          code=$?
+          set -e
+          # exit 2 = ยังไม่มีไฟล์บัญชีจัดครูเข้าสอนใน Drive -> ข้ามรอบนี้ ไม่ถือว่า run พัง
+          # และต้องไม่ commit ทับข้อมูลเดิมด้วยของว่าง (ดู sync/export_report.py)
+          if [ "$code" = "2" ]; then
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::ยังไม่พบไฟล์บัญชีจัดครูเข้าสอนใน Drive — ข้ามการอัปเดตข้อมูลรอบนี้"
+            exit 0
+          fi
+          exit $code
+
+      - name: commit report.json ถ้าข้อมูลเปลี่ยน
+        if: steps.export.outputs.skipped != 'true'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- web/public/data/report.json; then
+            echo "ข้อมูลไม่เปลี่ยน ไม่ต้อง commit"
+          else
+            git add web/public/data/report.json
+            git commit -m "data: อัปเดตข้อมูลงาน IS จาก Google Drive"
+            git push
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: build หน้าเว็บ
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+      - name: deploy ขึ้น GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4

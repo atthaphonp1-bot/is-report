@@ -1,0 +1,64 @@
+/* ฟอนต์ไทยอ่านง่าย: Noto Sans Thai จาก Google Fonts (น้ำหนักที่ใช้จริงในระบบ: 400/500/600/700) */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    background: #fbfbfd;
+  }
+
+  /* กันหน้าเลื่อนซ้าย-ขวาบนมือถือ (เจอจริง 2026-09-10): ถ้ามีอะไรกว้างเกินจอสักชิ้น
+   * (เช่น path ไฟล์ยาว ๆ ใน SourceCard) ทั้งหน้าจะเลื่อนตามไปด้วย ทำให้ปุ่มส่งข้อความ
+   * กับ header หลุดออกไปนอกจอ — ต้นเหตุจริงแก้ด้วย min-w-0 ตาม flex chain แล้ว
+   * (App.jsx/ChatWindow.jsx) บรรทัดนี้เป็นตาข่ายกันพลาดอีกชั้น */
+  html,
+  body {
+    overflow-x: hidden;
+    max-width: 100%;
+  }
+
+  body {
+    @apply bg-neutral-50 text-neutral-900 antialiased;
+    font-family: 'Noto Sans Thai', -apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter,
+      system-ui, sans-serif;
+    min-width: 320px;
+  }
+
+  /* iOS: กัน auto-zoom ตอน focus input ที่ font-size < 16px */
+  input,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+@layer components {
+  .school-login-shell {
+    background:
+      radial-gradient(circle at 50% -12%, rgb(219 234 254 / 72%), transparent 42%),
+      linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  }
+
+  .school-login-card {
+    box-shadow: 0 1px 2px rgb(15 23 42 / 4%), 0 18px 48px rgb(15 23 42 / 7%);
+  }
+
+  .school-logo-ring {
+    box-shadow: 0 8px 22px rgb(30 64 175 / 12%);
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    @apply bg-neutral-300 rounded-full;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
