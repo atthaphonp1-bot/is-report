@@ -76,8 +76,8 @@ export default function UpdateButton({ onDone }) {
 
   if (state === 'asking') {
     return (
-      <form onSubmit={submitToken} className="w-full space-y-2 rounded-2xl border border-neutral-200 bg-white p-3">
-        <p className="text-xs text-neutral-600">
+      <form onSubmit={submitToken} className="surface w-full space-y-2.5 p-4">
+        <p className="text-xs leading-relaxed text-dim">
           ใส่ GitHub token ของผู้ดูแล (fine-grained PAT ที่ให้สิทธิ์เฉพาะ repo นี้ และเปิดเฉพาะ
           <span className="font-medium"> Actions: Read and write</span>) เก็บไว้ในเครื่องนี้เท่านั้น
         </p>
@@ -87,17 +87,17 @@ export default function UpdateButton({ onDone }) {
           onChange={(e) => setTokenInput(e.target.value)}
           placeholder="github_pat_…"
           autoComplete="off"
-          className="w-full rounded-xl border border-neutral-200 px-3 py-2 text-sm"
+          className="field"
         />
-        {message && <p className="text-xs text-red-600">{message}</p>}
+        {message && <p className="text-xs text-warn">{message}</p>}
         <div className="flex gap-2">
-          <button type="submit" className="rounded-full bg-accent-600 px-3 py-1.5 text-xs font-medium text-white">
+          <button type="submit" className="btn-accent">
             บันทึกแล้วอัปเดตเลย
           </button>
           <button
             type="button"
             onClick={() => setState('idle')}
-            className="rounded-full bg-neutral-100 px-3 py-1.5 text-xs font-medium text-neutral-600"
+            className="pill"
           >
             ยกเลิก
           </button>
@@ -112,21 +112,21 @@ export default function UpdateButton({ onDone }) {
         type="button"
         onClick={start}
         disabled={state === 'running'}
-        className="rounded-full bg-accent-600 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-accent-700 disabled:opacity-50"
+        className="btn-accent"
       >
         {state === 'running' ? 'กำลังอัปเดต…' : 'อัปเดตข้อมูล'}
       </button>
       {message && (
-        <span className={`text-xs ${state === 'error' ? 'text-red-600' : 'text-neutral-500'}`}>
+        <span className={`text-xs ${state === 'error' ? 'text-warn' : 'text-dim'}`}>
           {message}
         </span>
       )}
       {state === 'error' && (
         <>
-          <a href={ACTIONS_URL} target="_blank" rel="noreferrer" className="text-xs text-accent-600 underline">
+          <a href={ACTIONS_URL} target="_blank" rel="noreferrer" className="text-xs text-accent underline">
             กดอัปเดตจากหน้า GitHub แทน
           </a>
-          <button type="button" onClick={forget} className="text-xs text-neutral-400 underline">
+          <button type="button" onClick={forget} className="text-xs text-faint underline">
             ลืม token
           </button>
         </>
