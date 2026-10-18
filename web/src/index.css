@@ -244,7 +244,8 @@
     height: 100%;
     border-radius: 980px;
     background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 82%, #5ac8fa), var(--accent));
-    transition: width 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+    /* ไม่ใส่ transition: ความกว้างถูกขับด้วย requestAnimationFrame ใน useCountUp ทุกเฟรม
+     * (ดู ProgressBar) ถ้าใส่ CSS transition ด้วย มันจะเริ่มนับใหม่ทุกเฟรมแล้วตามไม่ทัน */
   }
 
   .field {

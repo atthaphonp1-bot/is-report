@@ -42,20 +42,23 @@ function StatCard({ label, value, sub, tone = 'neutral' }) {
   )
 }
 
-function ProgressBar({ done, total }) {
+function ProgressBar({ done, total, index = 0 }) {
   const pct = total > 0 ? Math.round((done / total) * 100) : 0
+  // ใช้ตัวเดียวกับที่ทำเลขสถิติไต่ขึ้น จังหวะและเส้นโค้งความเร็วจึงตรงกันทั้งหน้า
+  // หน่วงทีละ 70ms ตามลำดับชั้น ให้แถบไหลเข้ามาเป็นระลอกแทนที่จะวิ่งพร้อมกันหมด
+  const grown = useCountUp(pct, { durationMs: 1000, delayMs: index * 70 })
   return (
     <div className="flex items-center gap-2.5">
       <div className="bar-track w-full min-w-0">
         <div
           className="bar-fill"
           style={{
-            width: `${pct}%`,
+            width: `${grown}%`,
             ...(pct === 100 ? { background: 'var(--good)' } : null),
           }}
         />
       </div>
-      <span className="w-9 shrink-0 text-right text-xs tabular-nums text-dim">{pct}%</span>
+      <span className="w-9 shrink-0 text-right text-xs tabular-nums text-dim">{grown}%</span>
     </div>
   )
 }
@@ -275,11 +278,11 @@ export default function ReportView() {
           <div className="surface p-4 sm:p-5">
             <h3 className="mb-4 text-sm font-semibold">แยกตามระดับชั้น</h3>
             <ul className="space-y-3.5">
-              {grades.map((g) => (
+              {grades.map((g, i) => (
                 <li key={g.grade} className="flex min-w-0 items-center gap-3">
                   <span className="w-10 shrink-0 text-sm font-medium">{g.grade}</span>
                   <span className="min-w-0 flex-1">
-                    <ProgressBar done={g.submitted} total={g.rooms} />
+                    <ProgressBar done={g.submitted} total={g.rooms} index={i} />
                   </span>
                   <span className="shrink-0 text-xs tabular-nums text-faint">
                     {g.submitted}/{g.rooms} ห้อง · {g.projects} โครงงาน

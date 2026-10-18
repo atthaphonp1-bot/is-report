@@ -47,12 +47,15 @@ export function valueAt(to, elapsedMs, durationMs) {
  * @param {object} [options] - Optional configuration.
  * @param {number} [options.durationMs=900] - Animation duration.
  * @param {boolean} [options.enabled=true] - If `false`, the hook returns `to` immediately.
+ * @param {number} [options.delayMs=0] - Wait this long before the value starts moving.
+ *   ใช้ไล่หลั่นแถบกราฟทีละแถว ให้เข้ามาเป็นระลอกแทนที่จะวิ่งพร้อมกันหมด
  * @returns {number} The number that should be rendered at this moment.
  */
 export function useCountUp(to, options = {}) {
   const {
     durationMs = 900,
     enabled = true,
+    delayMs = 0,
   } = options;
 
   // Detect reduced‑motion preference safely (works in Node too).
@@ -75,6 +78,9 @@ export function useCountUp(to, options = {}) {
       cancelAnimationFrame(frameIdRef.current);
       frameIdRef.current = null;
     }
+    // ต้องล้างจุดเริ่มด้วย ไม่งั้นรอบถัดไป (เช่น to เปลี่ยน) จะนับเวลาต่อจากรอบแรก
+    // แล้วกระโดดถึงค่าสุดท้ายทันทีเพราะ elapsed เลย durationMs ไปแล้ว
+    startRef.current = null;
 
     // Short‑circuit: no animation needed.
     if (immediate) {
@@ -93,7 +99,7 @@ export function useCountUp(to, options = {}) {
       if (startRef.current === null) {
         startRef.current = timestamp;
       }
-      const elapsed = timestamp - startRef.current;
+      const elapsed = timestamp - startRef.current - delayMs;
       const next = valueAt(to, elapsed, durationMs);
       setValue(next);
 
@@ -124,7 +130,7 @@ export function useCountUp(to, options = {}) {
       }
     };
     // Dependencies that restart the animation when they change.
-  }, [to, durationMs, enabled, prefersReducedMotion, immediate]);
+  }, [to, durationMs, delayMs, enabled, prefersReducedMotion, immediate]);
 
   return value;
 }
