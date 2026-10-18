@@ -87,7 +87,11 @@ jobs:
           npm ci
           npm run build
 
+      # enablement: true ให้ action เปิด Pages ให้เองถ้ายังไม่ได้เปิด — เคยล้มมาแล้วตอน repo
+      # ถูกสลับเป็น private ชั่วคราว ซึ่งทำให้ GitHub ลบ Pages site ทิ้งไปเฉย ๆ
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:
