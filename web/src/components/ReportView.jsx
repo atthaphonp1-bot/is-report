@@ -9,7 +9,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { REPORT_URL } from '../config.js'
 import { useCountUp } from '../lib/useCountUp.js'
 import ProjectsView from './ProjectsView.jsx'
-import UpdateButton from './UpdateButton.jsx'
 
 function formatSyncTime(ts) {
   if (!ts) return null
@@ -161,13 +160,10 @@ export default function ReportView() {
     }
   }
 
-  // reloadAt เปลี่ยนค่า = สั่งโหลดไฟล์ใหม่ (ปุ่มอัปเดตเรียกหลัง workflow ทำงานเสร็จ)
-  const [reloadAt, setReloadAt] = useState(0)
-
   useEffect(() => {
     let cancelled = false
     // ต่อ query เวลาไว้กัน cache ของ GitHub Pages ส่งไฟล์เก่ากลับมาหลังเพิ่ง sync เสร็จ
-    fetch(`${REPORT_URL}?t=${reloadAt}`, { cache: 'no-store' })
+    fetch(REPORT_URL, { cache: 'no-store' })
       .then((res) => {
         if (!res.ok) throw new Error(`โหลดรายงานไม่สำเร็จ (${res.status})`)
         return res.json()
@@ -184,7 +180,7 @@ export default function ReportView() {
     return () => {
       cancelled = true
     }
-  }, [reloadAt])
+  }, [])
 
   const rooms = useMemo(() => {
     if (!data) return []
@@ -255,16 +251,9 @@ export default function ReportView() {
             </button>
           ))}
         </div>
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <UpdateButton onDone={() => setReloadAt(Date.now())} />
-          <button
-            type="button"
-            onClick={copyLink}
-            className="btn-quiet"
-          >
-            {linkCopied ? 'คัดลอกลิงก์แล้ว' : 'คัดลอกลิงก์หน้านี้'}
-          </button>
-        </div>
+        <button type="button" onClick={copyLink} className="btn-quiet">
+          {linkCopied ? 'คัดลอกลิงก์แล้ว' : 'คัดลอกลิงก์หน้านี้'}
+        </button>
       </div>
 
       {tab === 'projects' ? (

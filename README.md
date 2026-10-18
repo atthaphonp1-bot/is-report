@@ -45,16 +45,20 @@ Secrets ของ repo (Settings -> Secrets and variables -> Actions):
 
 Pages: Settings -> Pages -> Source = **GitHub Actions**
 
-## ปุ่ม "อัปเดตข้อมูล" ในหน้าเว็บ
+## อัปเดตข้อมูลเมื่อไหร่
 
-หน้าเว็บเป็นไฟล์ static จึงเก็บความลับไม่ได้ ผู้ดูแลต้องกรอก **fine-grained PAT** ของตัวเอง
-ครั้งเดียว (เก็บใน localStorage ของ browser ตัวเอง ไม่ได้ฝังในโค้ด) สร้างที่
-Settings -> Developer settings -> Personal access tokens -> Fine-grained tokens โดย
+workflow รันเองทุก 30 นาที วันจันทร์-ศุกร์ 07:00-18:00 (เวลาไทย) หน้าเว็บจึงไม่มีปุ่มอะไรให้กด
+ผู้ใช้แค่เปิดดู
 
-- Repository access: เฉพาะ `is-report`
-- Permissions: **Actions = Read and write** อย่างเดียวเท่านั้น
+อยากอัปเดตเดี๋ยวนั้น: เปิด
+[หน้า Actions](https://github.com/atthaphonp1-bot/is-report/actions/workflows/sync.yml)
+(ลิงก์ "ประวัติการอัปเดต" มุมขวาบนของหน้าเว็บก็พามาที่นี่) แล้วกด **Run workflow** —
+ต้องล็อกอิน GitHub ที่มีสิทธิ์เขียน repo นี้
 
-ห้ามใช้ classic PAT เพราะสิทธิ์กว้างเกินไป ครูทั่วไปที่ไม่มี token ยังดูรายงานได้ปกติ กดปุ่มไม่ได้เท่านั้น
+> เคยมีปุ่ม "อัปเดตข้อมูล" ในหน้าเว็บที่สั่ง workflow ผ่าน GitHub REST API แต่ถอดออกเมื่อ
+> 2026-10-18 เพราะหน้า static เก็บความลับไม่ได้ ผู้ดูแลจึงต้องกรอก personal access token
+> ของตัวเองก่อนใช้งาน ซึ่งยุ่งยากเกินความจำเป็นในเมื่อ cron ทำงานให้อยู่แล้ว
+> ดู `git log` คำว่า "UpdateButton" ถ้าอยากได้โค้ดส่วนนั้นกลับมา
 
 ## ไฟล์บัญชีจัดครูเข้าสอน
 
