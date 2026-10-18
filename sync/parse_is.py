@@ -52,6 +52,38 @@ SKIP_DOCS = ("IS_สรุปเนื้อหา", "STEAM4INNOVATOR", "กล�
              "พลิกบทบาทครู", "รายงานสรุปเชิงปฏิบัติการ", "หลักสูตรโรงเรียน", "IS_คำอธิบาย",
              "IS_โครงงานรายห้อง", "IS_ภาพรวมสถานะงาน")
 
+# ไฟล์รูปแบบอิสระ 2 ไฟล์ที่ต้องอ่านด้วย logic เฉพาะ (ครูไม่ได้ใช้แบบฟอร์ม) — ชื่อไฟล์ตั้งโดย
+# ครู เปลี่ยน/ลบได้ตลอดใน Drive จึงต้องผ่าน _read_docx() เสมอ ห้ามเรียก docx.Document() ตรง ๆ
+FREEFORM_KANCHAPHORN = "IS 1 ครูกัญชพร M 208-M 2011.docx"
+FREEFORM_M1_11 = "ม.1 ห้อง 11.docx"
+
+
+def _read_docx(path: Path, missing_note: str = ""):
+    """เปิด .docx แบบ "ไฟล์เดียวพังไม่ล้มทั้งรอบ" — คืน None ถ้าเปิดไม่ได้
+
+    ทำตามแบบ drive.mirror_folder ที่ถือว่าไฟล์เดียวพังเป็น warning ไม่ใช่ error ของรอบ sync
+    เดิมบางจุดเรียก docx.Document() กับชื่อไฟล์ที่ hardcode ไว้ตรง ๆ ถ้าครูเปลี่ยนชื่อหรือลบไฟล์
+    นั้นใน Drive workflow จะล้มทุกรอบจนกว่าจะมีคนแก้โค้ด โดยไม่มีอะไรบอกว่าทำไม
+    """
+    if not path.exists():
+        logger.warning("ไม่พบไฟล์ %s — ข้ามไฟล์นี้%s", path.name, missing_note)
+        return None
+    try:
+        return docx.Document(str(path))
+    except Exception as exc:  # ไฟล์เสีย/ไม่ใช่ zip/ถูกตัดกลางทางตอน sync
+        logger.warning("อ่านไฟล์ %s ไม่ได้ (%s) — ข้ามไฟล์นี้%s", path.name, exc, missing_note)
+        return None
+
+
+def _read_pdf_text(path: Path) -> str | None:
+    """อ่านข้อความทุกหน้าของ PDF — คืน None ถ้าไฟล์เสีย/เข้ารหัส (ข้ามไฟล์เดียว ไม่ล้มทั้งรอบ)"""
+    try:
+        return "\n".join((pg.extract_text() or '') for pg in pypdf.PdfReader(str(path)).pages)
+    except Exception as exc:
+        logger.warning("อ่านไฟล์ %s ไม่ได้ (%s) — ข้ามไฟล์นี้ ข้อมูลโครงงานของห้องในไฟล์นี้จะหายไปจากรายงาน",
+                       path.name, exc)
+        return None
+
 def norm_room(s):
     """แปลงข้อความห้องเรียนทุกแบบที่ครูเขียนจริง -> "ม.3/7"
 
@@ -111,7 +143,9 @@ def extract_projects(files_dir: Path) -> list[dict]:
 
     for p in sorted(D.glob('*.docx')):
         if any(k in p.name for k in SKIP_DOCS): continue
-        d = docx.Document(str(p)); cur_room = cur_t = cur_s = None; pend = None
+        d = _read_docx(p, " ข้อมูลโครงงานของห้องในไฟล์นี้จะหายไปจากรายงาน")
+        if d is None: continue
+        cur_room = cur_t = cur_s = None; pend = None
         for ch in d.element.body.iterchildren():
             if ch.tag.endswith('}p'):
                 t = Paragraph(ch, d).text.strip()
@@ -133,7 +167,8 @@ def extract_projects(files_dir: Path) -> list[dict]:
     # ---------- PDF ----------
     for p in sorted(D.glob('*.pdf')):
         if 'IS 204' in p.name: continue
-        raw = "\n".join((pg.extract_text() or '') for pg in pypdf.PdfReader(str(p)).pages)
+        raw = _read_pdf_text(p)
+        if raw is None: continue
         for a, b in {'ห,อง':'ห้อง','ผู,':'ผู้','ผู;':'ผู้','กลุKม':'กลุ่ม','กลุMม':'กลุ่ม','ข*อ':'ข้อ','ข/อ':'ข้อ'}.items():
             raw = raw.replace(a, b)
         room = norm_room(raw[:900]) or norm_room(p.stem)
@@ -161,17 +196,20 @@ def extract_projects(files_dir: Path) -> list[dict]:
         add(room, teacher, subject, projs, p.name)
 
     # ---------- free-form ----------
-    d = docx.Document(str(D / 'IS 1 ครูกัญชพร M 208-M 2011.docx')); cur = None; buf = {}
-    for x in d.paragraphs:
-        t = x.text.strip()
-        if not t: continue
-        r = norm_room(t)
-        if r and 'ชั้นมัธยม' in t and len(t) < 40: cur = r; buf.setdefault(r, []); continue
-        if cur and len(t) > 5 and 'หัวข้อ' not in t and 'ครูกัญชพร' not in t: buf[cur].append(clean(t))
-    for room, titles in buf.items():
-        add(room, 'ครูกัญชพร วิเชียร', 'การศึกษาค้นคว้าด้วยตนเอง',
-            [{'name': t, 'members': [], 'advisor': 'ครูกัญชพร วิเชียร'} for t in titles],
-            'IS 1 ครูกัญชพร M 208-M 2011.docx')
+    d = _read_docx(D / FREEFORM_KANCHAPHORN,
+                   " ข้อมูลโครงงาน ม.2/8-ม.2/11 (ครูกัญชพร วิเชียร) จะหายไปจากรายงาน")
+    if d is not None:
+        cur = None; buf = {}
+        for x in d.paragraphs:
+            t = x.text.strip()
+            if not t: continue
+            r = norm_room(t)
+            if r and 'ชั้นมัธยม' in t and len(t) < 40: cur = r; buf.setdefault(r, []); continue
+            if cur and len(t) > 5 and 'หัวข้อ' not in t and 'ครูกัญชพร' not in t: buf[cur].append(clean(t))
+        for room, titles in buf.items():
+            add(room, 'ครูกัญชพร วิเชียร', 'การศึกษาค้นคว้าด้วยตนเอง',
+                [{'name': t, 'members': [], 'advisor': 'ครูกัญชพร วิเชียร'} for t in titles],
+                FREEFORM_KANCHAPHORN)
 
     # ไฟล์รูปแบบอิสระ (ไม่ใช้แบบฟอร์ม) — ใช้เฉพาะเมื่อห้องนั้นยังไม่มีไฟล์แบบฟอร์มเลย
     # เจอจริง 2026-09-09: ครูชยพลส่ง "ม.1 ห้อง 11 (ฟอร์ม).docx" ตามมาทีหลัง ถ้าไม่กันจะนับซ้ำ
@@ -179,15 +217,17 @@ def extract_projects(files_dir: Path) -> list[dict]:
     if any(k[0] == 'ม.1/11' for k in recs):
         return sorted(recs.values(),
                       key=lambda e: (int(e["room"][2]), int(e["room"].split("/")[1]), e["teacher"]))
-    d = docx.Document(str(D / 'ม.1 ห้อง 11.docx')); projs = []; cur = None
-    for x in d.paragraphs:
-        t = x.text.strip()
-        if not t or 'ชื่อหัวข้อโครงงาน' in t: continue
-        if re.match(r'^' + NAMEPFX, t):
-            if cur: cur['members'].append(clean(t))
-        else:
-            cur = {'name': clean(t), 'members': [], 'advisor': 'นายชยพล วังสุนทร'}; projs.append(cur)
-    add('ม.1/11', 'นายชยพล วังสุนทร', 'ความรู้เบื้องต้นทางการกีฬา', projs, 'ม.1 ห้อง 11.docx')
+    d = _read_docx(D / FREEFORM_M1_11, " ข้อมูลโครงงาน ม.1/11 จะหายไปจากรายงาน")
+    if d is not None:
+        projs = []; cur = None
+        for x in d.paragraphs:
+            t = x.text.strip()
+            if not t or 'ชื่อหัวข้อโครงงาน' in t: continue
+            if re.match(r'^' + NAMEPFX, t):
+                if cur: cur['members'].append(clean(t))
+            else:
+                cur = {'name': clean(t), 'members': [], 'advisor': 'นายชยพล วังสุนทร'}; projs.append(cur)
+        add('ม.1/11', 'นายชยพล วังสุนทร', 'ความรู้เบื้องต้นทางการกีฬา', projs, FREEFORM_M1_11)
 
     return sorted(recs.values(),
                   key=lambda e: (int(e["room"][2]), int(e["room"].split("/")[1]), e["teacher"]))
@@ -257,7 +297,13 @@ def read_desc_status(files_dir: Path) -> dict[str, str]:
         return {}
     html = f.read_text(encoding="utf-8", errors="replace")
     i = html.find("window.IS_DATA")
+    if i < 0:
+        logger.warning("ไฟล์ %s ไม่มี window.IS_DATA — ถือว่าไม่มีสถานะคำอธิบายรายวิชา", f.name)
+        return {}
     start = html.find("{", i)
+    if start < 0:
+        logger.warning("ไฟล์ %s มี window.IS_DATA แต่หา JSON ต่อท้ายไม่เจอ — ข้าม", f.name)
+        return {}
     depth, in_str, esc = 0, False, False
     for j in range(start, len(html)):
         ch = html[j]
@@ -270,9 +316,17 @@ def read_desc_status(files_dir: Path) -> dict[str, str]:
         elif ch == "}":
             depth -= 1
             if depth == 0:
-                data = json.loads(html[start:j + 1])
+                try:
+                    data = json.loads(html[start:j + 1])
+                except json.JSONDecodeError as exc:
+                    # ไฟล์นี้ถูก generate ขึ้นมา ถ้าพังก็ควรแค่ไม่มีสถานะ ไม่ใช่ล้มทั้งรอบ sync
+                    logger.warning("JSON ใน %s เสีย (%s) — ถือว่าไม่มีสถานะคำอธิบายรายวิชา", f.name, exc)
+                    return {}
                 break
     else:
+        logger.warning("JSON ใน %s ปิดวงเล็บไม่ครบ — ถือว่าไม่มีสถานะคำอธิบายรายวิชา", f.name)
+        return {}
+    if not isinstance(data, dict):
         return {}
     return {
         (c.get("code") or "").strip(): c.get("status", "ok")
@@ -332,7 +386,9 @@ def match_projects_to_rooms(roster: list[dict], extracted: list[dict]) -> None:
                 break
     leftover = [e["room"] for i, e in enumerate(extracted) if i not in used]
     if leftover:
-        print(f"  ⚠️ จับคู่ไม่ได้ {len(leftover)} รายการ: {leftover}", file=sys.stderr)
+        # เดิมเขียน sys.stderr แต่โมดูลนี้ไม่ได้ import sys — จับคู่ไม่ได้แม้รายการเดียว
+        # จะกลายเป็น NameError แล้วล้มทั้งรอบ ทั้งที่เป็นแค่เรื่องที่ต้องเตือน
+        logger.warning("จับคู่โครงงานกับบัญชีจัดครูเข้าสอนไม่ได้ %d รายการ: %s", len(leftover), leftover)
 
 
 NOTES = {
