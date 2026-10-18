@@ -6,7 +6,7 @@
 // GitHub จะ revoke ให้อัตโนมัติ) ครูทั่วไปไม่มี token ก็ยังดูรายงานได้ปกติ แค่กดปุ่มไม่ได้
 import { useState } from 'react'
 
-import { ACTIONS_URL, GITHUB_OWNER, GITHUB_REPO, SYNC_WORKFLOW } from '../config.js'
+import { ACTIONS_URL, GITHUB_OWNER, GITHUB_REPO, NEW_TOKEN_URL, SYNC_WORKFLOW } from '../config.js'
 import { clearToken, getToken, setToken, triggerSync, waitForRun } from '../lib/github.js'
 
 const ARGS = { owner: GITHUB_OWNER, repo: GITHUB_REPO, workflow: SYNC_WORKFLOW }
@@ -77,18 +77,55 @@ export default function UpdateButton({ onDone }) {
   if (state === 'asking') {
     return (
       <form onSubmit={submitToken} className="surface w-full space-y-2.5 p-4">
+        <p className="text-sm font-medium">ต้องใช้ GitHub token ของผู้ดูแล</p>
         <p className="text-xs leading-relaxed text-dim">
-          ใส่ GitHub token ของผู้ดูแล (fine-grained PAT ที่ให้สิทธิ์เฉพาะ repo นี้ และเปิดเฉพาะ
-          <span className="font-medium"> Actions: Read and write</span>) เก็บไว้ในเครื่องนี้เท่านั้น
+          ช่องนี้ไม่ใช่ที่อยู่ไฟล์ แต่เป็นรหัสที่ GitHub ออกให้ เพื่อยืนยันว่าคนกดมีสิทธิ์สั่งอัปเดต
+          กรอกครั้งเดียว เก็บไว้ในเบราว์เซอร์เครื่องนี้เท่านั้น ไม่ได้ส่งไปไหน
         </p>
+        <ol className="list-decimal space-y-1 pl-4 text-xs leading-relaxed text-dim">
+          <li>
+            เปิด{' '}
+            <a
+              href={NEW_TOKEN_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="text-accent underline"
+            >
+              หน้าสร้าง token ของ GitHub
+            </a>{' '}
+            (ต้องล็อกอินเป็น <span className="font-medium">{GITHUB_OWNER}</span>)
+          </li>
+          <li>
+            ช่อง <span className="font-medium">Repository access</span> เลือก
+            <span className="font-medium"> Only select repositories</span> แล้วเลือก{' '}
+            <span className="font-medium">{GITHUB_REPO}</span>
+          </li>
+          <li>
+            หัวข้อ <span className="font-medium">Repository permissions</span> หา{' '}
+            <span className="font-medium">Actions</span> แล้วตั้งเป็น{' '}
+            <span className="font-medium">Read and write</span> (อันเดียวพอ ที่เหลือปล่อยไว้)
+          </li>
+          <li>
+            กด <span className="font-medium">Generate token</span> แล้วคัดลอกรหัสที่ขึ้นต้นด้วย{' '}
+            <span className="font-medium">github_pat_</span> มาวางข้างล่างนี้
+          </li>
+        </ol>
         <input
           type="password"
           value={tokenInput}
           onChange={(e) => setTokenInput(e.target.value)}
-          placeholder="github_pat_…"
+          placeholder="วางรหัสที่ขึ้นต้นด้วย github_pat_ ที่นี่"
           autoComplete="off"
+          aria-label="GitHub token ของผู้ดูแล"
           className="field"
         />
+        <p className="text-xs leading-relaxed text-faint">
+          ไม่มี token ก็ไม่เป็นไร ระบบอัปเดตเองทุก 30 นาทีอยู่แล้ว หรือ{' '}
+          <a href={ACTIONS_URL} target="_blank" rel="noreferrer" className="text-accent underline">
+            กดสั่งอัปเดตจากหน้า GitHub
+          </a>{' '}
+          ก็ได้เหมือนกัน
+        </p>
         {message && <p className="text-xs text-warn">{message}</p>}
         <div className="flex gap-2">
           <button type="submit" className="btn-accent">

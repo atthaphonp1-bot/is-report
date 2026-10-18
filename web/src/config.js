@@ -7,6 +7,10 @@ export const SYNC_WORKFLOW = 'sync.yml'
 export const ACTIONS_URL =
   `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/actions/workflows/${SYNC_WORKFLOW}`
 
+// หน้าสร้าง fine-grained PAT ของ GitHub — ลิงก์ไว้ในฟอร์มขอ token เพราะผู้ใช้หาเองไม่เจอ
+// (เมนูอยู่ลึกมาก: Settings > Developer settings > Personal access tokens > Fine-grained)
+export const NEW_TOKEN_URL = 'https://github.com/settings/personal-access-tokens/new'
+
 // ไฟล์ข้อมูลที่ workflow เขียนทับทุกรอบ — path relative เพื่อให้ทำงานได้ทั้งตอน dev
 // (localhost:5174/) และตอนอยู่บน Pages ใต้ subpath (/is-report/)
 export const REPORT_URL = 'data/report.json'
