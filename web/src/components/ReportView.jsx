@@ -9,6 +9,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { REPORT_URL } from '../config.js'
 import { useCountUp } from '../lib/useCountUp.js'
 import ProjectsView from './ProjectsView.jsx'
+import DuplicateWarnings, {
+  ProjectDuplicateNote,
+  RoomDuplicateBadge,
+  RoomDuplicateList,
+} from './DuplicateWarnings.jsx'
 
 function formatSyncTime(ts) {
   if (!ts) return null
@@ -83,6 +88,7 @@ function RoomCard({ room, expanded, onToggle }) {
             {room.plans.map((p) => p.subject).join(', ')}
           </span>
         </span>
+        <RoomDuplicateBadge room={room} />
         <span className="shrink-0 text-xs tabular-nums text-dim">
           {room.submitted ? `${room.projects.length} โครงงาน` : 'ยังไม่ส่ง'}
         </span>
@@ -98,6 +104,7 @@ function RoomCard({ room, expanded, onToggle }) {
 
       {expanded && (
         <div className="hairline-t rise px-4 pb-4 pt-3 sm:px-5">
+          <RoomDuplicateList room={room} />
           {room.projects.length === 0 ? (
             <p className="text-sm text-faint">ยังไม่ได้ส่งรายชื่อโครงงาน</p>
           ) : (
@@ -118,6 +125,7 @@ function RoomCard({ room, expanded, onToggle }) {
                   {p.members && (
                     <p className="mt-1.5 break-words text-xs leading-relaxed text-faint">{p.members}</p>
                   )}
+                  <ProjectDuplicateNote project={p} />
                 </li>
               ))}
             </ol>
@@ -258,6 +266,8 @@ export default function ReportView() {
           {linkCopied ? 'คัดลอกลิงก์แล้ว' : 'คัดลอกลิงก์หน้านี้'}
         </button>
       </div>
+
+      <DuplicateWarnings data={data} />
 
       {tab === 'projects' ? (
         <ProjectsView data={data} />

@@ -107,7 +107,8 @@ def test_ยอดสรุปตรง():
     ]
     assert roster_to_report(roster)["summary"] == {
         "rooms": 3, "submitted": 2, "projects": 3, "students": 5,
-        "teachers": 3, "last_synced_at": None,
+        "teachers": 3, "duplicate_students": 0, "duplicate_students_confirmed": 0,
+        "last_synced_at": None,
     }
 
 
@@ -132,8 +133,10 @@ def test_last_synced_at_ส่งผ่านตรงๆ():
 def test_roster_ว่างไม่พัง():
     assert roster_to_report([]) == {
         "summary": {"rooms": 0, "submitted": 0, "projects": 0, "students": 0,
-                    "teachers": 0, "last_synced_at": None},
+                    "teachers": 0, "duplicate_students": 0,
+                    "duplicate_students_confirmed": 0, "last_synced_at": None},
         "grades": [], "rooms": [], "includes_members": True,
+        "warnings": {"duplicate_students": [], "cross_room_students": []},
     }
 
 
@@ -184,3 +187,53 @@ def test_grades_นับห้องที่ยุบแล้วไม่ใ�
     out = roster_to_report(roster)
     assert out["grades"] == [{"grade": "ม.1", "rooms": 1, "submitted": 1, "projects": 1}]
     assert out["summary"]["rooms"] == 1
+
+
+# --- คำเตือนนักเรียนชื่อซ้ำ ------------------------------------------------------
+def test_warnings_ติดคำเตือนลงห้องและลงโครงงาน():
+    roster = [row("ม.2/5", "ม.2", teacher="ครูเอ", projects=[
+        proj("พิชิตห้องเรียนสะอาด", ["ด.ญ.ชลิตา คายุ", "ด.ช.สมชาย ใจดี"]),
+        proj("เครื่องดื่มสมุนไพร", ["ด.ญ.ชลิตา คายุ"]),
+    ])]
+    out = roster_to_report(roster)
+    assert out["summary"]["duplicate_students"] == 1
+    assert out["summary"]["duplicate_students_confirmed"] == 1
+    assert [w["student"] for w in out["warnings"]["duplicate_students"]] == ["ด.ญ.ชลิตา คายุ"]
+    assert out["warnings"]["duplicate_students"][0]["room"] == "ม.2/5"
+    entry = out["rooms"][0]
+    # ของที่ติดไว้ที่ห้องไม่ต้องมี key room ซ้ำ เพราะอยู่ใต้ห้องนั้นอยู่แล้ว
+    assert entry["duplicate_students"] == [{
+        "student": "ด.ญ.ชลิตา คายุ", "level": "confirmed", "count": 2, "ords": [1, 2],
+        "projects": ["พิชิตห้องเรียนสะอาด", "เครื่องดื่มสมุนไพร"],
+    }]
+    assert [p.get("duplicate_members") for p in entry["projects"]] == [
+        ["ด.ญ.ชลิตา คายุ"], ["ด.ญ.ชลิตา คายุ"]]
+
+
+def test_warnings_ห้องที่ไม่มีชื่อซ้ำไม่มีธงติดที่โครงงาน():
+    roster = [row("ม.1/1", "ม.1", teacher="ครูเอ",
+                  projects=[proj("ก", ["เด็กชายสมชาย ใจดี", "เด็กหญิงมาลี ใจงาม"])])]
+    out = roster_to_report(roster)
+    assert out["rooms"][0]["duplicate_students"] == []
+    assert "duplicate_members" not in out["rooms"][0]["projects"][0]
+    assert out["summary"]["duplicate_students"] == 0
+
+
+def test_warnings_ชื่อครูในบัญชีจัดครูเข้าสอนไม่ถูกเตือน():
+    """ชื่อครูที่หลุดเข้าช่องสมาชิกต้องไม่ขึ้นเตือน แม้ parse_is จะพลาดกรองมาก่อนหน้า"""
+    roster = [row("ม.5/4", "ม.5", teacher="นางสาวมาลี รักเรียน", projects=[
+        proj("ก", ["เด็กหญิงพิมพ์ใจ ตั้งมั่น", "นางสาวมาลี รักเรียน"]),
+        proj("ข", ["เด็กหญิงอรุณี ขยัน", "นางสาวมาลี รักเรียน"]),
+    ])]
+    assert roster_to_report(roster)["warnings"]["duplicate_students"] == []
+
+
+def test_warnings_ชื่อเต็มที่โผล่สองห้องเข้า_cross_room():
+    roster = [
+        row("ม.1/1", "ม.1", teacher="ครูเอ", projects=[proj("ก", ["เด็กชายสมชาย ใจดี"])]),
+        row("ม.2/3", "ม.2", teacher="ครูบี", projects=[proj("ข", ["เด็กชายสมชาย ใจดี"])]),
+    ]
+    out = roster_to_report(roster)
+    assert out["warnings"]["cross_room_students"] == [
+        {"student": "เด็กชายสมชาย ใจดี", "rooms": ["ม.1/1", "ม.2/3"]}]
+    assert out["warnings"]["duplicate_students"] == []     # คนละห้องไม่ใช่ซ้ำในห้อง

@@ -10,6 +10,8 @@
 """
 from __future__ import annotations
 
+from sync.dup_check import find_cross_room_duplicates, find_room_duplicates, name_key
+
 
 
 def _digits(s: str, default: int = 99) -> int:
@@ -24,6 +26,26 @@ def _room_key(room: str) -> tuple[int, int]:
     return (_digits(grade), _digits(number))
 
 
+def _attach_duplicates(room_list: list[dict], duplicates: list[dict]) -> None:
+    """ติดคำเตือนลงห้องและลงตัวโครงงาน ให้หน้าเว็บไม่ต้องไล่จับคู่เองตอน render
+
+    ห้อง   -> duplicate_students: [{student, level, count, ords, projects}]
+    โครงงาน -> duplicate_members: [ชื่อที่ซ้ำซึ่งอยู่ในโครงงานนี้] (ไว้ไฮไลต์ในรายชื่อ)
+    """
+    by_room: dict[str, list[dict]] = {}
+    for w in duplicates:
+        by_room.setdefault(w["room"], []).append(w)
+    for entry in room_list:
+        warnings = by_room.get(entry["room"], [])
+        entry["duplicate_students"] = [
+            {k: v for k, v in w.items() if k != "room"} for w in warnings
+        ]
+        for project in entry["projects"]:
+            flagged = [w["student"] for w in warnings if project["ord"] in w["ords"]]
+            if flagged:
+                project["duplicate_members"] = flagged
+
+
 def roster_to_report(roster: list[dict], *, last_synced_at: str | None = None) -> dict:
     """รวม roster หลายแถวให้เหลือห้องละ 1 รายการ แล้วสรุปเป็นโครงสร้างสำหรับหน้าเว็บ
 
@@ -31,6 +53,7 @@ def roster_to_report(roster: list[dict], *, last_synced_at: str | None = None) -
     ดนตรีสากล เป็น 2 แถว คนละครู) จึงต้องยุบด้วยชื่อห้องแล้วรวม plans/teachers/projects เข้าด้วยกัน
     """
     rooms: dict[str, dict] = {}
+    flat_projects: list[dict] = []
     for row in roster:
         entry = rooms.setdefault(
             row["room"],
@@ -41,6 +64,7 @@ def roster_to_report(roster: list[dict], *, last_synced_at: str | None = None) -
                 "teachers": [],
                 "submitted": False,
                 "projects": [],
+                "duplicate_students": [],
             },
         )
         entry["submitted"] = entry["submitted"] or bool(row.get("projects"))
@@ -60,9 +84,10 @@ def roster_to_report(roster: list[dict], *, last_synced_at: str | None = None) -
         for project in row.get("projects") or []:
             # สร้าง dict ใหม่ ไม่ copy ของเดิมมาทั้งก้อน — ป้องกัน members หลุดไปกับผลลัพธ์
             members = project.get("members") or []
+            ordinal = len(entry["projects"]) + 1   # ไล่ใหม่ 1..n ข้ามทุกแถวของห้องนี้
             entry["projects"].append(
                 {
-                    "ord": len(entry["projects"]) + 1,  # ไล่ใหม่ 1..n ข้ามทุกแถวของห้องนี้
+                    "ord": ordinal,
                     "name": project.get("name") or "",
                     # หน้าเว็บแสดงสตริงนี้ตรง ๆ จึงรวมเป็นบรรทัดเดียวตั้งแต่ตรงนี้
                     "members": ", ".join(members),
@@ -70,8 +95,20 @@ def roster_to_report(roster: list[dict], *, last_synced_at: str | None = None) -
                     "advisor": project.get("advisor") or "",
                 }
             )
+            # เก็บรายชื่อแบบลิสต์ไว้ให้ตัวตรวจชื่อซ้ำ (ต้องเทียบทีละชื่อ ไม่ใช่สตริงรวม)
+            flat_projects.append({
+                "room": row["room"], "ord": ordinal,
+                "name": project.get("name") or "", "members": list(members),
+                "advisor": project.get("advisor") or "",
+            })
 
     room_list = sorted(rooms.values(), key=lambda e: _room_key(e["room"]))
+
+    # ตรวจชื่อซ้ำ "หลัง" ยุบห้องและตัดไฟล์ซ้ำแล้วเท่านั้น (ดู dup_check.py ข้อ 1)
+    teachers_all = [t for e in room_list for t in e["teachers"]]
+    duplicates = find_room_duplicates(flat_projects, teachers_all)
+    cross_room = find_cross_room_duplicates(flat_projects, teachers_all)
+    _attach_duplicates(room_list, duplicates)
 
     grades: dict[str, dict] = {}
     for entry in room_list:
@@ -89,11 +126,15 @@ def roster_to_report(roster: list[dict], *, last_synced_at: str | None = None) -
             "projects": sum(len(e["projects"]) for e in room_list),
             "students": sum(p["member_count"] for e in room_list for p in e["projects"]),
             "teachers": len({t for e in room_list for t in e["teachers"]}),
+            # จำนวน "คน" ที่ต้องให้ครูไปตรวจ ไม่ใช่จำนวนครั้งที่ซ้ำ
+            "duplicate_students": len(duplicates),
+            "duplicate_students_confirmed": sum(1 for w in duplicates if w["level"] == "confirmed"),
             "last_synced_at": last_synced_at,
         },
         "grades": sorted(grades.values(), key=lambda g: _digits(g["grade"])),
         "rooms": room_list,
         "includes_members": True,
+        "warnings": {"duplicate_students": duplicates, "cross_room_students": cross_room},
     }
 
 

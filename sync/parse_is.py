@@ -47,6 +47,12 @@ class RosterNotFoundError(RuntimeError):
 
 ROOM_OVERRIDE = {"IS ชั้น ม.4 ห้อง 10 ภาคเรียนที่1-2569 (วิชางานดอกไม้ใบตอง).docx": "ม.4/10"}
 JUNK = re.compile(r"^(รวมจำนวนนักเรียน|ชื่อโครงงาน|ลำดับ|หมายเหตุ)")
+
+# ข้อความหัวตาราง/ท้ายตารางที่หลุดเข้ามาอยู่ในช่อง "รายชื่อสมาชิกในกลุ่ม" — ไม่ใช่ชื่อคน
+# ("รวมจำนวนนักเรียน 27 คน", "หมายเหตุ: กรุณาระบุชื่อโครงงาน...", "ลำดับ ชื่อโครงงาน รายชื่อ
+# สมาชิกในกลุ่ม ครูที่ปรึกษาโครงงาน") แยกจาก JUNK เพราะ JUNK ใช้คัดชื่อโครงงานด้วย และชื่อ
+# โครงงานจริงขึ้นต้นด้วย "รวม" ได้ (เช่น "รวมพลัง...") แต่ชื่อนักเรียนไม่มีทางขึ้นต้นแบบนั้น
+MEMBER_JUNK = re.compile(r"^(รวม|หมายเหตุ|ลำดับ|ชื่อโครงงาน|รายชื่อ|ครูที่ปรึกษา)")
 NAMEPFX = r"(?:เด็กชาย|เด็กหญิง|ด\.ช\.|ด\.ญ\.|นางสาว|น\.ส\.|นาย|นาง|ว่าที่)"
 SKIP_DOCS = ("IS_สรุปเนื้อหา", "STEAM4INNOVATOR", "กลยุทธ์", "บทบาทครูยุคใหม่",
              "พลิกบทบาทครู", "รายงานสรุปเชิงปฏิบัติการ", "หลักสูตรโรงเรียน", "IS_คำอธิบาย",
@@ -108,12 +114,34 @@ def clean(s):
     s = re.sub(r'[.…]{3,}', ' ', (s or ''))
     return re.sub(r'\s+', ' ', s).strip(' .·-')
 
-def members(s):
+def _bare_name(s):
+    """ตัดคำนำหน้า/ช่องว่าง/จุดออกจากชื่อคน เพื่อเทียบว่าเป็นคนเดียวกันหรือไม่
+
+    ข้อความที่สกัดจาก PDF เว้นวรรคและใส่จุดไม่เหมือนต้นฉบับ ("น.ส ดาว" / "น.ส.ดาว")
+    เทียบสตริงตรง ๆ จึงไม่พอ
+    """
+    s = re.sub(r'[\s.]', '', s or '')
+    return re.sub(r'^(?:เด็กชาย|เด็กหญิง|ดช|ดญ|นางสาว|นส|นาย|นาง|ครู|ว่าที่รต(?:หญิง)?)', '', s)
+
+
+def members(s, advisor=''):
+    """แกะช่อง "รายชื่อสมาชิกในกลุ่ม" -> ลิสต์ชื่อนักเรียน
+
+    `advisor` คือชื่อครูที่ปรึกษาของโครงงานนั้น ส่งมาเพื่อ "คัดออก" — ในไฟล์ PDF ข้อความทั้งหน้า
+    ไหลต่อกัน ชื่อครูที่ปรึกษา (คอลัมน์ขวาสุดของตาราง) และข้อความท้ายตารางจึงหลุดมาต่อท้าย
+    รายชื่อสมาชิก ทำให้ยอด "นักเรียน" ในรายงานสูงกว่าจริง (เจอ 2026-10-19: รวม 1,476 คน)
+    """
     if not s: return []
     out = []
     for x in re.split(r'\n+|(?<=\S)\s(?=\d{1,2}\s*[.)]\s*'+NAMEPFX+')', s):
         x = clean(re.sub(r'^\s*\d{1,2}\s*[.)]\s*', '', x))
-        if x and x not in ('-', '–') and not x.startswith('รวม'): out.append(x)
+        if MEMBER_JUNK.match(x):
+            # ข้อความท้ายตารางยาวหลายบรรทัด บรรทัดต่อ ๆ ไปเป็นเศษประโยคที่ดูเหมือนชื่อคนได้
+            # ("ความเหมาะสม") — เจอหัวท้ายตารางแล้วหยุดตรงนั้น ไม่ใช่ข้ามทีละบรรทัด
+            break
+        if not x or x in ('-', '–'): continue
+        if advisor and _bare_name(x) == _bare_name(advisor): continue
+        out.append(x)
     return out
 
 def parse_tbl(rows):
@@ -123,8 +151,8 @@ def parse_tbl(rows):
         if len(r) < 3: continue
         nm = clean(r[1])
         if not nm or nm in ('-', '–') or JUNK.match(nm) or len(nm) < 4: continue
-        out.append({'name': nm, 'members': members(r[2]),
-                    'advisor': clean(re.sub(r'^\s*\d\s*[.)]\s*', '', r[3] if len(r) > 3 else ''))})
+        advisor = clean(re.sub(r'^\s*\d\s*[.)]\s*', '', r[3] if len(r) > 3 else ''))
+        out.append({'name': nm, 'members': members(r[2], advisor), 'advisor': advisor})
     return out
 
 
@@ -133,12 +161,29 @@ def extract_projects(files_dir: Path) -> list[dict]:
     (logic นี้ทดสอบจริงแล้วกับไฟล์ทั้ง 28 ไฟล์ ได้ 225 โครงงาน / 788 รายชื่อ ครบถ้วน)"""
     D = files_dir
     recs = {}
-    def add(room, teacher, subject, projs, src):
+    def add(room, teacher, subject, projs, src, *, fallback=False):
+        """รวมโครงงานเข้า record ของ (ห้อง, ครู)
+
+        `fallback=True` = แหล่งสำรอง (PDF / ไฟล์รูปแบบอิสระ) ให้ใช้เฉพาะเมื่อห้องนั้นยังไม่มี
+        ข้อมูลจากแหล่งไหนเลย — ครูหลายคนอัปขึ้น Drive ทั้ง .docx และ .pdf ของเนื้อหาเดียวกัน
+        (เจอ 2026-10-19: ม.1/1 มี 3 ไฟล์ -> 9 โครงงานกลายเป็น 27, ทั้งระบบ 303 -> 356)
+        ยึด .docx เป็นหลักเพราะข้อความที่สกัดจาก PDF เพี้ยน ("น้ายา", "ก าหนด", "ปSญหา")
+        และยังตัดนามสกุลแยกเป็นอีกรายการ ทำให้นับนักเรียนเกินด้วย
+        """
         if not room or not projs: return
+        if fallback and any(r == room for r, _ in recs): return
         e = recs.setdefault((room, teacher or ''),
                             {'room': room, 'teacher': teacher or '', 'subject': subject or '', 'projects': [], 'sources': []})
         if subject and not e['subject']: e['subject'] = subject
-        e['projects'] += projs
+        # กันตารางเดิมซ้ำสองรอบในไฟล์เดียว (ครูก็อปตารางทิ้งไว้ท้ายเอกสาร) — โครงงานที่ทั้ง
+        # ชื่อและรายชื่อสมาชิกตรงกันเป๊ะคือสำเนา ไม่ใช่สองกลุ่มที่ทำหัวข้อเดียวกัน (สองกลุ่มที่
+        # ตั้งชื่อเหมือนกันมีจริง เช่น ม.1/4 "นิทานพื้นบ้าน เรื่องเมืองลับแล" แต่สมาชิกคนละชุด)
+        seen = {(x['name'], tuple(x['members'])) for x in e['projects']}
+        for proj in projs:
+            fingerprint = (proj['name'], tuple(proj['members']))
+            if fingerprint in seen: continue
+            seen.add(fingerprint)
+            e['projects'].append(proj)
         if src not in e['sources']: e['sources'].append(src)
 
     for p in sorted(D.glob('*.docx')):
@@ -165,8 +210,9 @@ def extract_projects(files_dir: Path) -> list[dict]:
                     add(ROOM_OVERRIDE.get(p.name) or pend or cur_room, cur_t, cur_s, parse_tbl(rows), p.name); pend = None
 
     # ---------- PDF ----------
+    # PDF เป็นแหล่งสำรองเสมอ (ดู add(..., fallback=True)) — เดิมกันไฟล์ซ้ำด้วย hardcode
+    # ชื่อไฟล์เดียว ('IS 204') ซึ่งคุมไม่ทันทุกครั้งที่ครูอัปทั้งสองนามสกุล
     for p in sorted(D.glob('*.pdf')):
-        if 'IS 204' in p.name: continue
         raw = _read_pdf_text(p)
         if raw is None: continue
         for a, b in {'ห,อง':'ห้อง','ผู,':'ผู้','ผู;':'ผู้','กลุKม':'กลุ่ม','กลุMม':'กลุ่ม','ข*อ':'ข้อ','ข/อ':'ข้อ'}.items():
@@ -190,10 +236,10 @@ def extract_projects(files_dir: Path) -> list[dict]:
                 for l in lines:
                     if re.match(r'\s*1\s*\.\s*(?:นางสาว|นาง|นาย|ว่าที่)\s*' + re.escape(teacher.split()[-1] if teacher else 'ZZZ'), l): break
                     keep.append(l)
-                mem = members('\n'.join(keep))
+                mem = members('\n'.join(keep), teacher)
             if nm and len(nm) > 5 and not JUNK.match(nm):
                 projs.append({'name': nm, 'members': mem, 'advisor': teacher})
-        add(room, teacher, subject, projs, p.name)
+        add(room, teacher, subject, projs, p.name, fallback=True)
 
     # ---------- free-form ----------
     d = _read_docx(D / FREEFORM_KANCHAPHORN,
@@ -209,16 +255,14 @@ def extract_projects(files_dir: Path) -> list[dict]:
         for room, titles in buf.items():
             add(room, 'ครูกัญชพร วิเชียร', 'การศึกษาค้นคว้าด้วยตนเอง',
                 [{'name': t, 'members': [], 'advisor': 'ครูกัญชพร วิเชียร'} for t in titles],
-                FREEFORM_KANCHAPHORN)
+                FREEFORM_KANCHAPHORN, fallback=True)
 
-    # ไฟล์รูปแบบอิสระ (ไม่ใช้แบบฟอร์ม) — ใช้เฉพาะเมื่อห้องนั้นยังไม่มีไฟล์แบบฟอร์มเลย
-    # เจอจริง 2026-09-09: ครูชยพลส่ง "ม.1 ห้อง 11 (ฟอร์ม).docx" ตามมาทีหลัง ถ้าไม่กันจะนับซ้ำ
-    # (27 โครงงาน = 13 จากแบบฟอร์ม + 14 จากไฟล์เดิม) — ยึดแบบฟอร์มเป็นหลักเพราะข้อมูลครบกว่า
-    if any(k[0] == 'ม.1/11' for k in recs):
-        return sorted(recs.values(),
-                      key=lambda e: (int(e["room"][2]), int(e["room"].split("/")[1]), e["teacher"]))
+    # ไฟล์รูปแบบอิสระ (ไม่ใช้แบบฟอร์ม) — เป็นแหล่งสำรองเหมือน PDF ใช้เฉพาะเมื่อห้องนั้นยังไม่มี
+    # ไฟล์แบบฟอร์มเลย เจอจริง 2026-09-09: ครูชยพลส่ง "ม.1 ห้อง 11 (ฟอร์ม).docx" ตามมาทีหลัง
+    # ถ้าไม่กันจะนับซ้ำ (27 โครงงาน = 13 จากแบบฟอร์ม + 14 จากไฟล์เดิม) — ยึดแบบฟอร์มเป็นหลัก
+    # เพราะข้อมูลครบกว่า ตอนนี้กฎนี้อยู่ใน add(fallback=True) จุดเดียว ไม่ต้อง return ก่อน
     d = _read_docx(D / FREEFORM_M1_11, " ข้อมูลโครงงาน ม.1/11 จะหายไปจากรายงาน")
-    if d is not None:
+    if d is not None and not any(r == 'ม.1/11' for r, _ in recs):
         projs = []; cur = None
         for x in d.paragraphs:
             t = x.text.strip()
@@ -227,7 +271,8 @@ def extract_projects(files_dir: Path) -> list[dict]:
                 if cur: cur['members'].append(clean(t))
             else:
                 cur = {'name': clean(t), 'members': [], 'advisor': 'นายชยพล วังสุนทร'}; projs.append(cur)
-        add('ม.1/11', 'นายชยพล วังสุนทร', 'ความรู้เบื้องต้นทางการกีฬา', projs, FREEFORM_M1_11)
+        add('ม.1/11', 'นายชยพล วังสุนทร', 'ความรู้เบื้องต้นทางการกีฬา', projs,
+            FREEFORM_M1_11, fallback=True)
 
     return sorted(recs.values(),
                   key=lambda e: (int(e["room"][2]), int(e["room"].split("/")[1]), e["teacher"]))

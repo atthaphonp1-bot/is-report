@@ -8,6 +8,11 @@
 // (ดู lib/filterRooms.js)
 import { useMemo, useState } from 'react'
 import { filterRooms } from '../lib/filterRooms.js'
+import {
+  ProjectDuplicateNote,
+  RoomDuplicateBadge,
+  RoomDuplicateList,
+} from './DuplicateWarnings.jsx'
 
 function RoomProjects({ room }) {
   const subjects = [...new Set(room.plans.map((p) => p.subject).filter(Boolean))].join(', ')
@@ -16,12 +21,17 @@ function RoomProjects({ room }) {
       <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
         <h3 className="text-[17px] font-semibold tracking-tight">{room.room}</h3>
         <span className="min-w-0 text-sm text-dim">{subjects || '—'}</span>
+        <RoomDuplicateBadge room={room} />
       </div>
       <p className="mt-1 break-words text-xs text-dim">
         ครูผู้สอน {room.teachers.join(' / ') || '—'} · {room.projects.length} โครงงาน
       </p>
 
-      <ol className="mt-2 space-y-1.5">
+      <div className="mt-2">
+        <RoomDuplicateList room={room} />
+      </div>
+
+      <ol className="space-y-1.5">
         {room.projects.map((p) => (
           <li
             key={p.ord}
@@ -38,6 +48,7 @@ function RoomProjects({ room }) {
             {p.members && (
               <p className="mt-1.5 break-words text-xs leading-relaxed text-faint">{p.members}</p>
             )}
+            <ProjectDuplicateNote project={p} />
           </li>
         ))}
       </ol>
